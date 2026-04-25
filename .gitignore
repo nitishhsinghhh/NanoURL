@@ -1,69 +1,97 @@
-# Prerequisites
-*.d
+# -----------------------------------------------------------------------------
+# Global Git Ignore Configuration
+# Project:      NanoURL (High-Performance C++ & .NET 8 Engine)
+# Component:    Mono-Repo Root Workspace (M2 Optimized)
+# -----------------------------------------------------------------------------
+# STRATEGY:
+# * Multi-Stack Protection: Covers C++17 Native Engine, .NET 8 API, and UI.
+# * Environment Neutrality: Strips IDE and OS-specific (M2/Windows/Linux) noise.
+# * Artifact Isolation: Ensures build binaries never enter the source tree.
+# -----------------------------------------------------------------------------
 
-# Compiled Object files
-*.slo
-*.lo
+# ==========================================
+# .NET 8 / C# (API Gateway)
+# ==========================================
+bin/
+obj/
+out/
+publish/
+# Local settings that shouldn't be shared
+appsettings.Development.json
+*.user
+*.suo
+*.sln.docstates
+# Managed memory dumps/Tracing artifacts
+*.gcno
+*.gcda
+*.trace
+
+# ==========================================
+# C++17 / CMake (Native Shortening Engine)
+# ==========================================
+# Build directories across all platforms
+build/
+build_Local/
+bin-int/
+# Native artifacts (Targeting lib/ directory)
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
 *.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
-build/
-Build/
-build-*/
-
+*.pdb
+*.exp
+*.ilk
 # CMake generated files
-CMakeFiles/
+.cmake/
 CMakeCache.txt
+CMakeFiles/
 cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
-
-# Temporary files
-*.tmp
-*.log
-*.bak
-*.swp
-
-# vcpkg
+CMakeSettings.json
 vcpkg_installed/
+Makefile
 
-# debug information files
-*.dwo
+# ==========================================
+# UI / Frontend (JavaScript/Assets)
+# ==========================================
+node_modules/
+dist/
+.eslintcache
+*.log
+# Environment variables
+.env
+.env.local
 
-# test output & cache
-Testing/
-.cache/
+# ==========================================
+# macOS (M2 MacBook Air Specifics)
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+# Thumbnails & Metadata
+._*
+
+# ==========================================
+# Docker & DevOps
+# ==========================================
+data/
+db_data/
+docker-compose.override.yml
+*.tar
+*.tar.gz
+
+# ==========================================
+# IDE / Editor Specific
+# ==========================================
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+
+# ==========================================
+# Whitelist / Inclusions
+# ==========================================
+# Ensure the main solution file is tracked
+!NanoURL.sln
