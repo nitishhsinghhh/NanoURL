@@ -1,87 +1,125 @@
 #*********************************************************************/
-#  CI Pipeline - Multi-OS Native Engine Matrix                       */
+#  CI Pipeline - NanoURL Cross-Platform Native Engine                */
 #                                                                    */
-#  Purpose   : Builds and validates the native C++ engine on         */
-#              Windows, macOS (ARM64), and Linux (x64).              */
+#  Purpose   : Orchestrates a multi-OS build and test matrix for     */
+#              the NanoURL C++17 core engine.                        */
+#  Trigger   : Push to main / Pull Request to main                   */
+#  Runtime   : Matrix Build (Ubuntu, Windows, macOS)                 */
 #                                                                    */
-#  Trigger   : Push / Pull Request on main and develop branches.      */
+#  Notes     : - Uses platform-specific cleanup and config logic.    */
+#              - Enforces Release configuration for performance.     */
+#              - Artifacts include shared libraries for .NET Interop.*/
 #                                                                    */
 #  Revision History:                                                 */
 #  ------------------------------------------------------------------ */
 #  Version    Date        Author          Description                */
 #  ------------------------------------------------------------------ */
-#  1.1        2026-04-26  Nitish Singh    Added Multi-OS Matrix      */
+#  1.0        2026-04-26  Nitish Singh    Initial Native CI Matrix   */
 #*********************************************************************/
 
-name: Native Engine Multi-OS
+name: NanoURL Native Engine - Multi-OS Matrix
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ main ]
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  build-and-test:
+    name: Build and Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    env:
+      BUILD_DIR: build
+      # Standardizing bin path for artifact collection
+      BIN_OUTPUT: build/bin
 
     steps:
-      - name: Checkout Repository
+      # ======================================================
+      # 1. ENVIRONMENT INITIALIZATION
+      # ======================================================
+      
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          if [ "${{ runner.os }}" == "macOS" ]; then
-            brew install cmake
-          elif [ "${{ runner.os }}" == "Linux" ]; then
-            sudo apt-get update && sudo apt-get install -y cmake build-essential
-          fi
-        shell: bash
+      - name: Install compiler and CMake (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake
 
-      - name: Configure CMake
-        run: |
-          mkdir -p build
-          if [ "${{ runner.os }}" == "macOS" ]; then
-            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-          else
-            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DAPPLE=OFF
-          fi
-        shell: bash
+      - name: Install CMake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake
 
-      - name: Build Targets
-        run: |
-          if [ "${{ runner.os }}" == "macOS" ]; then
-            cmake --build build --config Release -j $(sysctl -n hw.ncpu)
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            cmake --build build --config Release
-          else
-            cmake --build build --config Release -j $(nproc)
-          fi
-        shell: bash
+      - name: Install CMake (Windows)
+        if: runner.os == 'Windows'
+        run: choco install cmake ninja --yes
 
-      - name: Run Native Diagnostics
-        run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            ./build/bin/Release/NanoURL_CLI.exe
-          else
-            chmod +x ./build/bin/NanoURL_CLI
-            ./build/bin/NanoURL_CLI
-          fi
-        shell: bash
+      # ======================================================
+      # 2. WORKSPACE CLEANUP
+      # ======================================================
 
-      - name: Upload Artifacts
+      - name: Clean build directory (Non-Windows)
+        if: runner.os != 'Windows'
+        run: rm -rf ${{ env.BUILD_DIR }}
+
+      - name: Clean build directory (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "${{ env.BUILD_DIR }}") {
+            Remove-Item -Recurse -Force "${{ env.BUILD_DIR }}"
+          }
+
+      # ======================================================
+      # 3. BUILD ORCHESTRATION
+      # ======================================================
+
+      - name: Configure (Non-Windows)
+        if: runner.os != 'Windows'
+        run: cmake -B ${{ env.BUILD_DIR }} -S . -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B ${{ env.BUILD_DIR }} -S . -G "Visual Studio 17 2022" -A x64
+
+      - name: Build Project (All Platforms)
+        run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
+
+      # ======================================================
+      # 4. NATIVE DIAGNOSTIC EXECUTION
+      # ======================================================
+
+      - name: Run Diagnostics (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x ./${{ env.BIN_OUTPUT }}/NanoURL_CLI
+          ./${{ env.BIN_OUTPUT }}/NanoURL_CLI
+
+      - name: Run Diagnostics (Windows)
+        if: runner.os == 'Windows'
+        run: ./${{ env.BIN_OUTPUT }}/Release/NanoURL_CLI.exe
+
+      # ======================================================
+      # 5. POST-EXECUTION ARTIFACTS
+      # ======================================================
+
+      - name: Upload Native Shared Library
         uses: actions/upload-artifact@v4
         with:
           name: NanoURLNative-${{ matrix.os }}
           path: |
-            build/bin/libNanoURLNative.dylib
-            build/bin/libNanoURLNative.so
-            build/bin/Release/NanoURLNative.dll
+            ${{ env.BIN_OUTPUT }}/libNanoURLNative.dylib
+            ${{ env.BIN_OUTPUT }}/libNanoURLNative.so
+            ${{ env.BIN_OUTPUT }}/Release/NanoURLNative.dll
+            ${{ env.BIN_OUTPUT }}/Release/NanoURLNative.lib
           if-no-files-found: ignore

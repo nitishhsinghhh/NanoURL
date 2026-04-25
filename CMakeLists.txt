@@ -13,28 +13,28 @@ if(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
 endif()
 
 # -----------------------------------------------------------------------------
-# 2. Include Paths
+# 2. Unified Output Directories
+# -----------------------------------------------------------------------------
+# This ensures that on Windows, Mac, and Linux, all binaries (.dll, .so, .dylib, .exe)
+# and link libraries (.lib) land in the same predictable folder.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+# -----------------------------------------------------------------------------
+# 3. Include Paths
 # -----------------------------------------------------------------------------
 include_directories(src/NativeEngine/include)
 
 # -----------------------------------------------------------------------------
-# 3. Native Engine (Shared Library for .NET Interop)
+# 4. Native Engine (Shared Library for .NET Interop)
 # -----------------------------------------------------------------------------
-# Creates libNanoURLNative.dylib
 add_library(NanoURLNative SHARED
     src/NativeEngine/src/InMemoryLinkShortener.cpp
 )
 
 # -----------------------------------------------------------------------------
-# 4. CLI Application (Local Testing)
+# 5. CLI Application (Local Testing)
 # -----------------------------------------------------------------------------
-# Creates the NanoURL_CLI executable
 add_executable(NanoURL_CLI src/NativeEngine/src/main.cpp)
 target_link_libraries(NanoURL_CLI PRIVATE NanoURLNative)
-
-# -----------------------------------------------------------------------------
-# 5. Output Configuration
-# -----------------------------------------------------------------------------
-# Ensures binaries go to a 'bin' folder in your build directory for easy access
-set_target_properties(NanoURL_CLI PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-set_target_properties(NanoURLNative PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
