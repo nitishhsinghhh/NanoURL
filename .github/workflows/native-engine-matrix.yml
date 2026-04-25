@@ -17,109 +17,80 @@
 #  1.0        2026-04-26  Nitish Singh    Initial Native CI Matrix   */
 #*********************************************************************/
 
-name: NanoURL Native Engine - Multi-OS Matrix
+name: NanoURL CLI Build - All OS
 
 on:
   push:
-    branches: ["main", "develop"]
+    branches: [ main, develop ]
   pull_request:
-    branches: ["main"]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+    branches: [ main ]
 
 jobs:
   build-and-test:
-    name: Build and Test (${{ matrix.os }})
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-
-    env:
-      BUILD_DIR: build
-      # Standardizing bin path for artifact collection
-      BIN_OUTPUT: build/bin
+        os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
       # ======================================================
-      # 1. ENVIRONMENT INITIALIZATION
+      # 1. SETUP
       # ======================================================
-      
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install compiler and CMake (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake
-
-      - name: Install CMake (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake
-
-      - name: Install CMake (Windows)
-        if: runner.os == 'Windows'
-        run: choco install cmake ninja --yes
-
-      # ======================================================
-      # 2. WORKSPACE CLEANUP
-      # ======================================================
-
-      - name: Clean build directory (Non-Windows)
-        if: runner.os != 'Windows'
-        run: rm -rf ${{ env.BUILD_DIR }}
-
-      - name: Clean build directory (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Install Dependencies
+        shell: bash
         run: |
-          if (Test-Path "${{ env.BUILD_DIR }}") {
-            Remove-Item -Recurse -Force "${{ env.BUILD_DIR }}"
-          }
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            brew install cmake
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y cmake build-essential
+          fi
 
       # ======================================================
-      # 3. BUILD ORCHESTRATION
+      # 2. CONFIGURE & BUILD (Static Linking)
       # ======================================================
-
-      - name: Configure (Non-Windows)
-        if: runner.os != 'Windows'
-        run: cmake -B ${{ env.BUILD_DIR }} -S . -DCMAKE_BUILD_TYPE=Release
-
-      - name: Configure (Windows)
-        if: runner.os == 'Windows'
-        run: cmake -B ${{ env.BUILD_DIR }} -S . -G "Visual Studio 17 2022" -A x64
-
-      - name: Build Project (All Platforms)
-        run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
-
-      # ======================================================
-      # 4. NATIVE DIAGNOSTIC EXECUTION
-      # ======================================================
-
-      - name: Run Diagnostics (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Configure and Build
+        shell: bash
         run: |
-          chmod +x ./${{ env.BIN_OUTPUT }}/NanoURL_CLI
-          ./${{ env.BIN_OUTPUT }}/NanoURL_CLI
-
-      - name: Run Diagnostics (Windows)
-        if: runner.os == 'Windows'
-        run: ./${{ env.BIN_OUTPUT }}/Release/NanoURL_CLI.exe
+          # Use -DAPPLE=OFF for Non-Mac to avoid M2 flag errors on Ubuntu/Windows
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DAPPLE=OFF
+          fi
+          cmake --build build --config Release --parallel
 
       # ======================================================
-      # 5. POST-EXECUTION ARTIFACTS
+      # 3. RUN STANDALONE DIAGNOSTICS
       # ======================================================
+      - name: Run Diagnostics
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            # Windows might place the exe in /bin or /bin/Release depending on Generator
+            if [ -f "./build/bin/Release/NanoURL_CLI.exe" ]; then
+              ./build/bin/Release/NanoURL_CLI.exe
+            else
+              ./build/bin/NanoURL_CLI.exe
+            fi
+          else
+            chmod +x ./build/bin/NanoURL_CLI
+            ./build/bin/NanoURL_CLI
+          fi
 
-      - name: Upload Native Shared Library
+      # ======================================================
+      # 4. ARTIFACT PRESERVATION
+      # ======================================================
+      - name: Upload CLI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NanoURLNative-${{ matrix.os }}
+          name: NanoURL-CLI-${{ matrix.os }}
           path: |
-            ${{ env.BIN_OUTPUT }}/libNanoURLNative.dylib
-            ${{ env.BIN_OUTPUT }}/libNanoURLNative.so
-            ${{ env.BIN_OUTPUT }}/Release/NanoURLNative.dll
-            ${{ env.BIN_OUTPUT }}/Release/NanoURLNative.lib
-          if-no-files-found: ignore
+            build/bin/NanoURL_CLI
+            build/bin/NanoURL_CLI.exe
+            build/bin/Release/NanoURL_CLI.exe
+          if-no-files-found: error
