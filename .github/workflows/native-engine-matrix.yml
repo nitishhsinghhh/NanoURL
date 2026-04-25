@@ -1,0 +1,87 @@
+#*********************************************************************/
+#  CI Pipeline - Multi-OS Native Engine Matrix                       */
+#                                                                    */
+#  Purpose   : Builds and validates the native C++ engine on         */
+#              Windows, macOS (ARM64), and Linux (x64).              */
+#                                                                    */
+#  Trigger   : Push / Pull Request on main and develop branches.      */
+#                                                                    */
+#  Revision History:                                                 */
+#  ------------------------------------------------------------------ */
+#  Version    Date        Author          Description                */
+#  ------------------------------------------------------------------ */
+#  1.1        2026-04-26  Nitish Singh    Added Multi-OS Matrix      */
+#*********************************************************************/
+
+name: Native Engine Multi-OS
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            brew install cmake
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y cmake build-essential
+          fi
+        shell: bash
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DAPPLE=OFF
+          fi
+        shell: bash
+
+      - name: Build Targets
+        run: |
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            cmake --build build --config Release -j $(sysctl -n hw.ncpu)
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            cmake --build build --config Release
+          else
+            cmake --build build --config Release -j $(nproc)
+          fi
+        shell: bash
+
+      - name: Run Native Diagnostics
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            ./build/bin/Release/NanoURL_CLI.exe
+          else
+            chmod +x ./build/bin/NanoURL_CLI
+            ./build/bin/NanoURL_CLI
+          fi
+        shell: bash
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NanoURLNative-${{ matrix.os }}
+          path: |
+            build/bin/libNanoURLNative.dylib
+            build/bin/libNanoURLNative.so
+            build/bin/Release/NanoURLNative.dll
+          if-no-files-found: ignore
