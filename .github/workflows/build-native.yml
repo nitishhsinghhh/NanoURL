@@ -1,0 +1,81 @@
+#*********************************************************************/
+#  CI Pipeline - Native Engine Build & Diagnostics                   */
+#                                                                    */
+# Purpose   : Builds and validates the native C++ URL Shortener      */
+#             engine on macOS (ARM64) environment.                   */
+#                                                                    */
+# Trigger   : Push / Pull Request on main and develop branches.      */
+#                                                                    */
+# Runtime   : macOS Latest (Apple Silicon / ARM64 optimized)         */
+#                                                                    */
+# Notes     : - Uses CMake for cross-platform build configuration.   */
+#             - Executes NanoURL CLI for runtime validation.         */
+#             - Uploads compiled shared library as artifact.         */
+#                                                                    */
+# Revision History:                                                  */
+# ------------------------------------------------------------------ */
+# Version    Date        Author          Description                 */
+# ------------------------------------------------------------------ */
+# 1.0        2026-04-26  Nitish Singh    Initial Native CI Pipeline  */
+#*********************************************************************/
+
+name: Native Engine CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-native:
+    name: Build and Test
+    # Use macos-latest for GitHub, act will map this to Ubuntu locally
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            brew install cmake
+          else
+            sudo apt-get update && sudo apt-get install -y cmake build-essential
+          fi
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build
+          # If on Linux (via act), we skip M2 specific flags to avoid build errors
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DAPPLE=OFF
+          fi
+
+      - name: Build Targets
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake --build build --config Release -j $(sysctl -n hw.ncpu)
+          else
+            cmake --build build --config Release -j $(nproc)
+          fi
+
+      - name: Run Native Diagnostics
+        run: |
+          if [ -f "./build/bin/NanoURL_CLI" ]; then
+            chmod +x ./build/bin/NanoURL_CLI
+            ./build/bin/NanoURL_CLI
+          else
+            echo "Binary not found in bin directory"
+            exit 1
+          fi
+
+      - name: Upload Native Artifacts
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libNanoURLNative-macos
+          path: build/bin/libNanoURLNative.dylib
