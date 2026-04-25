@@ -1,0 +1,98 @@
+#*********************************************************************/
+#  Security Pipeline - CodeQL Advanced Semantic Analysis             */
+#                                                                    */
+#  Purpose   : Performs SAST (Static Application Security Testing)     */
+#              across the NanoURL polyglot stack (C++, C#, TS).      */
+#  Trigger   : Weekly Schedule / Push & PR to main                   */
+#  Runtime   : Matrix Build (Multi-language Analysis)                */
+#                                                                    */
+#  Notes     : - Manual build mode enabled for C++ to handle         */
+#                standalone static architecture.                     */
+#              - Targets memory safety in Native C++ core.           */
+#              - Scans for injection and path traversal.             */
+#                                                                    */
+#  Revision History:                                                 */
+#  ------------------------------------------------------------------ */
+#  Version    Date        Author          Description                */
+#  ------------------------------------------------------------------ */
+#  1.0        2026-04-26  Nitish Singh    NanoURL Security Baseline  */
+#*********************************************************************/
+
+name: "Security Audit"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '30 23 * * 1' # Runs at 11:30 PM every Monday
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      security-events: write
+      packages: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: c-cpp
+            build-mode: manual  # Essential for C++ to capture the build graph
+          - language: csharp
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      # ======================================================
+      # 1. ENVIRONMENT INITIALIZATION
+      # ======================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Tools (C++)
+        if: matrix.language == 'c-cpp'
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake
+
+      # ======================================================
+      # 2. CODEQL INITIALIZATION
+      # ======================================================
+      - name: Initialize CodeQL Engine
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-extended adds quality and performance queries
+          queries: security-extended,security-and-quality
+
+      # ======================================================
+      # 3. COMPILATION LAYER (C++ Only)
+      # ======================================================
+      - name: Run Manual Build (Native Engine)
+        if: matrix.build-mode == 'manual' && matrix.language == 'c-cpp'
+        shell: bash
+        run: |
+          echo "Building NanoURL Native Core for Semantic Analysis..."
+          # Standardizing on your root CMakeLists structure
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DAPPLE=OFF
+          cmake --build build --config Release --parallel
+
+      # ======================================================
+      # 4. ANALYSIS & UPLOAD
+      # ======================================================
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{matrix.language}}"
