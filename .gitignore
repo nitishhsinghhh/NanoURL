@@ -94,4 +94,4 @@ docker-compose.override.yml
 # Whitelist / Inclusions
 # ==========================================
 # Ensure the main solution file is tracked
-!NanoURL.sln
+NanoURL.sln
